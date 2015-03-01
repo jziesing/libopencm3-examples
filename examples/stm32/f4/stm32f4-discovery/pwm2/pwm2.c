@@ -27,6 +27,7 @@
 uint16_t duty_cycle_number;
 uint16_t newTime;
 uint16_t factor = 25;
+uint16_t interrupt_time = 500;
 static void clock_setup(void)
 {
     rcc_clock_setup_hse_3v3(&hse_8mhz_3v3[CLOCK_3V3_168MHZ]);
@@ -38,9 +39,9 @@ static void gpio_setup(void)
     rcc_periph_clock_enable(RCC_GPIOD);
     /* Set GPIO12 (in GPIO port C) to 'output push-pull'. */
     gpio_mode_setup(GPIOD, GPIO_MODE_AF,
-                    GPIO_PUPD_NONE, GPIO12);
+                    GPIO_PUPD_NONE, GPIO12 | GPIO13 | GPIO14);
     /* Set GPIO12 (in GPIO port C) alternate function */
-    gpio_set_af(GPIOD, GPIO_AF2, GPIO12);
+    gpio_set_af(GPIOD, GPIO_AF2, GPIO12 | GPIO13 | GPIO14);
 }
 
 static void tim_setup(void)
@@ -64,24 +65,39 @@ static void tim_setup(void)
     timer_disable_oc_output(TIM4, TIM_OC2);
     timer_disable_oc_output(TIM4, TIM_OC3);
     timer_disable_oc_output(TIM4, TIM_OC4);
+
     timer_disable_oc_clear(TIM4, TIM_OC1);
     timer_disable_oc_clear(TIM4, TIM_OC2);
+    timer_disable_oc_clear(TIM4, TIM_OC3);
+    timer_disable_oc_clear(TIM4, TIM_OC4);
 
     timer_enable_oc_preload(TIM4, TIM_OC1);
     timer_disable_oc_preload(TIM4, TIM_OC2);
+    timer_enable_oc_preload(TIM4, TIM_OC3);
+    timer_enable_oc_preload(TIM4, TIM_OC4);
 
     timer_set_oc_slow_mode(TIM4, TIM_OC1);
     timer_set_oc_slow_mode(TIM4, TIM_OC2);
+    timer_set_oc_slow_mode(TIM4, TIM_OC3);
+    timer_set_oc_slow_mode(TIM4, TIM_OC4);
 
     timer_set_oc_mode(TIM4, TIM_OC1, TIM_OCM_PWM1);
     timer_set_oc_mode(TIM4, TIM_OC2, TIM_OCM_FROZEN);
+    timer_set_oc_mode(TIM4, TIM_OC3, TIM_OCM_PWM1);
+    timer_set_oc_mode(TIM4, TIM_OC4, TIM_OCM_PWM1);
 
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
+    timer_set_oc_polarity_high(TIM4, TIM_OC3);
+    timer_set_oc_polarity_high(TIM4, TIM_OC4);
     timer_set_oc_value(TIM4, TIM_OC1, 1000);
     timer_set_oc_value(TIM4, TIM_OC2, 1000); 
+    timer_set_oc_value(TIM4, TIM_OC3, 1000);
+    timer_set_oc_value(TIM4, TIM_OC4, 1000);
 
     timer_enable_oc_output(TIM4, TIM_OC1);
-    //timer_disable_preload(TIM4);
+    timer_enable_oc_output(TIM4, TIM_OC3);
+    timer_enable_oc_output(TIM4, TIM_OC4);
+    timer_disable_preload(TIM4);
     timer_enable_counter(TIM4);
     timer_enable_irq(TIM4, TIM_DIER_CC1IE);
 }
@@ -90,15 +106,16 @@ void tim4_isr(void)
 {
     if (timer_get_flag(TIM4, TIM_SR_CC1IF)) {
         timer_clear_flag(TIM4, TIM_SR_CC1IF);
- 
-        duty_cycle_number = timer_get_counter(TIM4);
-        newTime = duty_cycle_number - factor;
-        if(newTime <= 1000) {
-            newTime = 65000;
-        }
-        timer_set_oc_value(TIM4, TIM_OC1, newTime); 
-        timer_set_oc_value(TIM4, TIM_OC2, newTime);   
+    
+        timer_set_oc_value(TIM4, TIM_OC1, timer_get_counter(TIM4)); 
+        timer_set_oc_value(TIM4, TIM_OC2, interrupt_time);   
+        timer_set_oc_value(TIM4, TIM_OC3, timer_get_counter(TIM4));
+        timer_set_oc_value(TIM4, TIM_OC4, timer_get_counter(TIM4));
+
         timer_enable_oc_output(TIM4, TIM_OC1);
+        timer_enable_oc_output(TIM4, TIM_OC3);
+        timer_enable_oc_output(TIM4, TIM_OC4);
+
         timer_disable_preload(TIM4);
         timer_enable_counter(TIM4);
           
@@ -113,7 +130,6 @@ int main(void)
 
     while (1) { 
         __WFI();
-        //__asm__("nop");
     }
     return 0;
 }
