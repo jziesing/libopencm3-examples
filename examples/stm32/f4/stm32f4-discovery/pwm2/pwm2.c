@@ -1,3 +1,4 @@
+
 /*
 * This file is part of the libopencm3 project.
 *
@@ -24,12 +25,13 @@
 #include <libopencm3/stm32/exti.h>
 #include <libopencmsis/core_cm3.h>
 /*
- * global variables: 
+ * global variables:
  *   -increment = pwm duty cycle value
  *   -descending = flag for increasing or decreasing increment
  */
 uint16_t increment;
 uint16_t descending;
+
 static void clock_setup(void)
 {
     /*
@@ -42,7 +44,7 @@ static void gpio_setup(void)
 {
     /* Enable clock on GPIOD pin. */
     rcc_periph_clock_enable(RCC_GPIOD);
-    /* 
+    /*
      * Setup gpio mode:
      *   -Set port D which has clock
      *   -Set the mode to the alternate function enabled for pwm
@@ -51,7 +53,9 @@ static void gpio_setup(void)
      */
     gpio_mode_setup(GPIOD, GPIO_MODE_AF,
                     GPIO_PUPD_NONE, GPIO12 | GPIO13 | GPIO14 | GPIO15);
-    /* Set GPIO12, GPIO13, GPIO14, and GPIO15 (in GPIO port D) alternate function */
+    /* Set GPIO12, GPIO13, GPIO14, and GPIO15 (in GPIO port D) alternate function
+     * to allow peripheral pwm to have use of gpio pins
+     */
     gpio_set_af(GPIOD, GPIO_AF2, GPIO12 | GPIO13 | GPIO14 | GPIO15);
 }
 
@@ -126,7 +130,7 @@ static void tim_setup(void)
      * set output compare value to 500, dim or short duty cycle
      */
     timer_set_oc_value(TIM4, TIM_OC1, 500);
-    timer_set_oc_value(TIM4, TIM_OC2, 500); 
+    timer_set_oc_value(TIM4, TIM_OC2, 500);
     timer_set_oc_value(TIM4, TIM_OC3, 500);
     timer_set_oc_value(TIM4, TIM_OC4, 500);
     /*
@@ -148,7 +152,7 @@ static void tim_setup(void)
 
 void tim4_isr(void)
 {
-    if (timer_get_flag(TIM4, TIM_SR_CC1IF)) {
+    if (timer_get_flag(TIM4, TIM_SR_UIF)) {
         /* clear update flag */
         timer_clear_flag(TIM4, TIM_SR_UIF);
         /*
@@ -180,8 +184,8 @@ void tim4_isr(void)
          * set new incremented value for oc register
          * which is setup for pwm by the alternate function
          */
-        timer_set_oc_value(TIM4, TIM_OC1, increment); 
-        timer_set_oc_value(TIM4, TIM_OC2, increment);   
+        timer_set_oc_value(TIM4, TIM_OC1, increment);
+        timer_set_oc_value(TIM4, TIM_OC2, increment);
         timer_set_oc_value(TIM4, TIM_OC3, increment);
         timer_set_oc_value(TIM4, TIM_OC4, increment);
     }
@@ -200,7 +204,7 @@ int main(void)
     /*
      * just wait for the inturrupt..
      */
-    while (1) { 
+    while (1) {
         __WFI();
     }
     return 0;
