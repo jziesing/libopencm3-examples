@@ -23,14 +23,19 @@
 #include <libopencm3/stm32/timer.h>
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/exti.h>
+#include <libopencm3/stm32/dma.h>
 #include <libopencmsis/core_cm3.h>
+
+//void dma_start(void);
 /*
  * global variables:
  *   -increment = pwm duty cycle value
  *   -descending = flag for increasing or decreasing increment
  */
+ uint16_t data_block[256];
 uint16_t increment;
 uint16_t descending;
+
 static void clock_setup(void)
 {
     /*
@@ -50,10 +55,9 @@ static void gpio_setup(void)
      *   -Disable or set the pull up pull down register to none
      *   -Enable it on gpios 12, 13, 14, and 15.
      */
-    gpio_mode_setup(GPIOD, GPIO_MODE_AF,
-                    GPIO_PUPD_NONE, GPIO12 | GPIO13 | GPIO14 | GPIO15);
+    gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);
     /* Set GPIO12, GPIO13, GPIO14, and GPIO15 (in GPIO port D) alternate function */
-    gpio_set_af(GPIOD, GPIO_AF2, GPIO12 | GPIO13 | GPIO14 | GPIO15);
+    gpio_set_af(GPIOD, GPIO_AF2, GPIO12);
 }
 
 static void tim_setup(void)
@@ -85,223 +89,140 @@ static void tim_setup(void)
      * disable output compare output on all 4 channels
      */
     timer_disable_oc_output(TIM4, TIM_OC1);
-    timer_disable_oc_output(TIM4, TIM_OC2);
-    timer_disable_oc_output(TIM4, TIM_OC3);
-    timer_disable_oc_output(TIM4, TIM_OC4);
+    // timer_disable_oc_output(TIM4, TIM_OC2);
+    // timer_disable_oc_output(TIM4, TIM_OC3);
+    // timer_disable_oc_output(TIM4, TIM_OC4);
     /*
      * clear output compare registers on all 4 channels
      */
     timer_disable_oc_clear(TIM4, TIM_OC1);
-    timer_disable_oc_clear(TIM4, TIM_OC2);
-    timer_disable_oc_clear(TIM4, TIM_OC3);
-    timer_disable_oc_clear(TIM4, TIM_OC4);
+    // timer_disable_oc_clear(TIM4, TIM_OC2);
+    // timer_disable_oc_clear(TIM4, TIM_OC3);
+    // timer_disable_oc_clear(TIM4, TIM_OC4);
     /*
      * enable output compare preloading or auto updating
      */
     timer_enable_oc_preload(TIM4, TIM_OC1);
-    timer_enable_oc_preload(TIM4, TIM_OC2);
-    timer_enable_oc_preload(TIM4, TIM_OC3);
-    timer_enable_oc_preload(TIM4, TIM_OC4);
+    // timer_enable_oc_preload(TIM4, TIM_OC2);
+    // timer_enable_oc_preload(TIM4, TIM_OC3);
+    // timer_enable_oc_preload(TIM4, TIM_OC4);
     /*
      * set the output compare to slow mode in all 4 channels
      */
     timer_set_oc_slow_mode(TIM4, TIM_OC1);
-    timer_set_oc_slow_mode(TIM4, TIM_OC2);
-    timer_set_oc_slow_mode(TIM4, TIM_OC3);
-    timer_set_oc_slow_mode(TIM4, TIM_OC4);
+    // timer_set_oc_slow_mode(TIM4, TIM_OC2);
+    // timer_set_oc_slow_mode(TIM4, TIM_OC3);
+    // timer_set_oc_slow_mode(TIM4, TIM_OC4);
     /*
      * set the output compare to pwm1 for all for channels
      */
     timer_set_oc_mode(TIM4, TIM_OC1, TIM_OCM_PWM1);
-    timer_set_oc_mode(TIM4, TIM_OC2, TIM_OCM_PWM1);
-    timer_set_oc_mode(TIM4, TIM_OC3, TIM_OCM_PWM1);
-    timer_set_oc_mode(TIM4, TIM_OC4, TIM_OCM_PWM1);
+    // timer_set_oc_mode(TIM4, TIM_OC2, TIM_OCM_PWM1);
+    // timer_set_oc_mode(TIM4, TIM_OC3, TIM_OCM_PWM1);
+    // timer_set_oc_mode(TIM4, TIM_OC4, TIM_OCM_PWM1);
     /*
      * disable output compare output on all 4 channels
      */
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
-    timer_set_oc_polarity_high(TIM4, TIM_OC2);
-    timer_set_oc_polarity_high(TIM4, TIM_OC3);
-    timer_set_oc_polarity_high(TIM4, TIM_OC4);
+    // timer_set_oc_polarity_high(TIM4, TIM_OC2);
+    // timer_set_oc_polarity_high(TIM4, TIM_OC3);
+    // timer_set_oc_polarity_high(TIM4, TIM_OC4);
     /*
      * set output compare value to 500, dim or short duty cycle
      */
     timer_set_oc_value(TIM4, TIM_OC1, 500);
-    timer_set_oc_value(TIM4, TIM_OC2, 500);
-    timer_set_oc_value(TIM4, TIM_OC3, 500);
-    timer_set_oc_value(TIM4, TIM_OC4, 500);
+    // timer_set_oc_value(TIM4, TIM_OC2, 500);
+    // timer_set_oc_value(TIM4, TIM_OC3, 500);
+    // timer_set_oc_value(TIM4, TIM_OC4, 500);
     /*
      * enable output compare output on all 4 channels
      */
     timer_enable_oc_output(TIM4, TIM_OC1);
-    timer_enable_oc_output(TIM4, TIM_OC2);
-    timer_enable_oc_output(TIM4, TIM_OC3);
-    timer_enable_oc_output(TIM4, TIM_OC4);
+    // timer_enable_oc_output(TIM4, TIM_OC2);
+    // timer_enable_oc_output(TIM4, TIM_OC3);
+    // timer_enable_oc_output(TIM4, TIM_OC4);
     /*
      * enable the preload
      * enable the counter
      * enable the inturrupt on the auto update register
+
      */
+    //timer_set_dma_on_update_event(TIM4);
+    
     timer_enable_preload(TIM4);
     timer_enable_counter(TIM4);
-    timer_enable_irq(TIM4, TIM_DIER_UIE);
+    timer_enable_irq(TIM4, TIM_DIER_UDE);
 }
-
-void tim4_isr(void)
-{
-    if (timer_get_flag(TIM4, TIM_SR_CC1IF)) {
-        /* clear update flag */
-        timer_clear_flag(TIM4, TIM_SR_UIF);
-        /*
-         * simple logic to keep oc value increasing and decreasing
-         * changing value increment get updated by increases or
-         * decreases the speed of the how fast the leds get bright and dim
-         */
-        if (descending == 0)
-        {
-            if (increment >= 65000)
-            {
-                descending = 1;
-                increment -= 50;
-            } else {
-                increment += 50;
-            }
-        } else if (descending == 1)
-        {
-            if (increment <= 500)
-            {
-                descending = 0;
-                increment += 50;
-            } else {
-                increment -= 50;
-            }
-
-        }
-        /*
-         * set new incremented value for oc register
-         * which is setup for pwm by the alternate function
-         */
-        timer_set_oc_value(TIM4, TIM_OC1, increment);
-        timer_set_oc_value(TIM4, TIM_OC2, increment);
-        timer_set_oc_value(TIM4, TIM_OC3, increment);
-        timer_set_oc_value(TIM4, TIM_OC4, increment);
-    }
-}
-
-void tim4_isr(void)
-{
-    TIM_CR1(TIM4) = 0;
-    TIM_DIER(TIM4) = 0;
-    TIM_SR(TIM4) = 0;
-    ws2812_dma_disable();
-    ws2812_state = ws2812_state_idle;
-}
-
-void ws2812_dma_init(void)
-{
-    rcc_periph_clock_enable(RCC_DMA1);
-
-    TIM_CCER(TIM4) = (TIM_CCER_CC1E);
-    TIM_CCMR1(TIM4) = (TIM_CCMR1_OC1M_PWM1 |
-                       TIM_CCMR1_OC1PE);
-    //potential jack fixes8
-    DMA_SCR(DMA1, DMA_CHANNEL7) = 0;
-    DMA_SNDTR(DMA1, DMA_CHANNEL7) = WS2812_BUFFER_SIZE;
-    DMA_SPAR(DMA1, DMA_CHANNEL7) = (uint32_t)(&TIM_CCR1(TIM4));
-    DMA_SM0AR(DMA1, DMA_CHANNEL7) = (uint32)(&ws2812_dma_buffer[0]);
-    DMA_LIFCR(DMA1) = 0;
-    DMA_HIFCR(DMA1) = 0;
-
-
-
-    
-
-    /* This is setting up the DMA and has to be ported to F4... */
-    //DMA_CCR(DMA1, DMA_CHANNEL7) = 0;
-    //DMA_CNDTR(DMA1, DMA_CHANNEL7) = WS2812_BUFFER_SIZE;
-    //DMA_CPAR(DMA1, DMA_CHANNEL7) = (uint32_t)(&TIM_CCR1(TIM4));
-    //DMA_CMAR(DMA1, DMA_CHANNEL7) = (uint32_t)(&ws2812_dma_buffer[0]);
-    //DMA_IFCR(DMA1) = DMA_IFCR_CGIF(DMA_CHANNEL7);
-
-    /* This is setting up the interrupt controller to call the DMA interrupts. */
-    //nvic_clear_pending_irq(NVIC_DMA1_CHANNEL7_IRQ);
-    //nvic_enable_irq(NVIC_DMA1_CHANNEL7_IRQ);
-    //nvic_set_priority(NVIC_DMA1_CHANNEL7_IRQ, 0);
-}
-
 /*--------------------------------------------------------------------*/
 static void dma_setup(void)
 {
-    /* DAC channel 1 uses DMA controller 1 Stream 5 Channel 7. */
-    /* Enable DMA1 clock and IRQ */
+    // good
     rcc_periph_clock_enable(RCC_DMA1);
-    nvic_enable_irq(NVIC_DMA1_STREAM5_IRQ);
-    dma_stream_reset(DMA1, DMA_STREAM5);
-    dma_set_priority(DMA1, DMA_STREAM5, DMA_SxCR_PL_LOW);
-    dma_set_memory_size(DMA1, DMA_STREAM5, DMA_SxCR_MSIZE_8BIT);
-    dma_set_peripheral_size(DMA1, DMA_STREAM5, DMA_SxCR_PSIZE_8BIT);
-    dma_enable_memory_increment_mode(DMA1, DMA_STREAM5);
-    dma_enable_circular_mode(DMA1, DMA_STREAM5);
-    dma_set_transfer_mode(DMA1, DMA_STREAM5,
-                DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-    /* The register to target is the DAC1 8-bit right justified data
-       register */
-    dma_set_peripheral_address(DMA1, DMA_STREAM5, (uint32_t) &DAC_DHR8R1);
-    /* The array v[] is filled with the waveform data to be output */
-    dma_set_memory_address(DMA1, DMA_STREAM5, (uint32_t) waveform);
-    dma_set_number_of_data(DMA1, DMA_STREAM5, 256);
-    dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM5);
-    dma_channel_select(DMA1, DMA_STREAM5, DMA_SxCR_CHSEL_7);
-    dma_enable_stream(DMA1, DMA_STREAM5);
+    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+    dma_stream_reset(DMA1, DMA_STREAM6);
+    dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_MEDIUM);
+    // 16 bit seems good size
+    dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_16BIT);
+    dma_set_peripheral_size(DMA1, DMA_STREAM6, DMA_SxCR_PSIZE_16BIT);
+    // not too sure about these settings
+    dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
+    dma_enable_circular_mode(DMA1, DMA_STREAM6);
+    dma_set_transfer_mode(DMA1, DMA_STREAM6, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
+    // not convinced
+    dma_set_peripheral_address(DMA1, DMA_STREAM6, (uint32_t)&TIM4_CCR1);
+    // I think this should be a local variable need to make it
+    dma_set_memory_address(DMA1, DMA_STREAM6,(uint32_t)data_block);
+    // number of datablocks to transfer from mem to peripheral
+    dma_set_number_of_data(DMA1, DMA_STREAM6, 256);
+    // inturrupt when halfway and when complete.
+    //dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
+    dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
+    // use channel 2 b/c its mapped to TIM4_UP on stream 6
+    dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
+    
+
+
+    // needed to catch dma compete flag
+    nvic_clear_pending_irq(NVIC_DMA1_STREAM6_IRQ);
+    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+    nvic_set_priority(NVIC_DMA1_STREAM6_IRQ, 0);
+}
+
+static void dma_start(void)
+{
+     // good to get dma running
+    dma_enable_stream(DMA1, DMA_STREAM6);
 }
 
 void dma1_stream6_isr(void)
 {
-    /* TODO */
-    //DMA_IFCR(DMA1) = DMA_IFCR_CGIF(DMA_CHANNEL7);
-        
-    /* Not done yet, so fill the next buffer and wait for the send to
-     * complete. */
-    if (ws2812_send_begin != ws2812_send_end) {
-            ws2812_fill_next_buffer(ws2812_timer_one_high(), ws2812_timer_zero_high());
-        return;
-    }
-
-    /* Just clock out one extra buffer to make sure everything is
-     * completely out before we start the reset sequence. */
-    if (ws2812_send_begin != 0) {
-        ws2812_send_begin = 0;
-        ws2812_send_end = 0;
-        return;
-    }
     
-    /* May already have clocked something out, but we don't care at this
-     * point since it's past the end of the chain. */
-    ws2812_dma_disable();
-    ws2812_timer_start_reset();
-}
-
-
-
-void ws2812_fill_next_buffer(uint8_t high, uint8_t low)
-{
-    uint8_t *target;
-    if (ws2812_buffer_half) {
-        target = &ws2812_dma_buffer[(WS2812_BUFFER_SIZE)/2];
-    } else {
-        target = &ws2812_dma_buffer[0];
-    }
-    ws2812_buffer_half = !ws2812_buffer_half;
-    for (int total = 0; total < (WS2812_BUFFER_SIZE)/(8*2) &&
-            ws2812_send_begin != ws2812_send_end; ++ws2812_send_begin, ++total) {
-        uint8_t source = *ws2812_send_begin;
-        for (int bit=0; bit<8; bit++, source <<= 1, ++target) {
-            if (source & 0x80) {
-                *target = high;
-            } else {
-                *target = low;
-            }
-        }
+    if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_TCIF)) {
+#if 0
+        dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_TCIF);
+     
+        dma_stream_reset(DMA1, DMA_STREAM6);
+        dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_MEDIUM);
+        // 16 bit seems good size
+        dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_16BIT);
+        dma_set_peripheral_size(DMA1, DMA_STREAM6, DMA_SxCR_PSIZE_16BIT);
+        // not too sure about these settings
+        dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
+        //dma_enable_circular_mode(DMA1, DMA_STREAM6);
+        dma_set_transfer_mode(DMA1, DMA_STREAM6, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
+        // not convinced
+        dma_set_peripheral_address(DMA1, DMA_STREAM6, (uint32_t)&TIM4_CCR1);
+        // I think this should be a local variable need to make it
+        dma_set_memory_address(DMA1, DMA_STREAM6,(uint32_t)data_block);
+        // number of datablocks to transfer from mem to peripheral
+        dma_set_number_of_data(DMA1, DMA_STREAM6, 256);
+        // inturrupt when complete, send data again but this time less in inturrupt
+        dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
+        // use channel 2 b/c its mapped to TIM4_UP on stream 6
+        dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
+        // good to get dma running
+        dma_enable_stream(DMA1, DMA_STREAM6);
+#endif
     }
 }
 
@@ -311,15 +232,53 @@ int main(void)
      * initialize to increasing duty cycle
      * setup the clock, gpio, and timer.. in that order
      */
-    descending = 0;
     clock_setup();
     gpio_setup();
     tim_setup();
+    dma_setup();
+    int i;
+    for(i=0; i<256; i++) {
+        data_block[i] = i*100;
+    }
+    dma_start();
     /*
      * just wait for the inturrupt..
      */
+
     while (1) {
         __WFI();
     }
     return 0;
 }
+
+
+// void tim4_isr(void)
+// {
+//     if (timer_get_flag(TIM4, TIM_SR_CC1IF)) {
+//         timer_clear_flag(TIM4, TIM_SR_UIF);
+//         if (descending == 0)
+//         {
+//             if (increment >= 65000)
+//             {
+//                 descending = 1;
+//                 increment -= 50;
+//             } else {
+//                 increment += 50;
+//             }
+//         } else if (descending == 1)
+//         {
+//             if (increment <= 500)
+//             {
+//                 descending = 0;
+//                 increment += 50;
+//             } else {
+//                 increment -= 50;
+//             }
+
+//         }
+//         timer_set_oc_value(TIM4, TIM_OC1, increment);
+//         timer_set_oc_value(TIM4, TIM_OC2, increment);
+//         timer_set_oc_value(TIM4, TIM_OC3, increment);
+//         timer_set_oc_value(TIM4, TIM_OC4, increment);
+//     }
+// }
