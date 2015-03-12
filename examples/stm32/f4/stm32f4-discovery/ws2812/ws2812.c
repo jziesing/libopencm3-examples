@@ -25,18 +25,31 @@
 #include <libopencm3/stm32/exti.h>
 #include <libopencm3/stm32/dma.h>
 #include <libopencmsis/core_cm3.h>
+
+//void dma_start(void);
 /*
- * summary:
- *   This example uses dma to add data to a peripheral, a timer. 
- *   The timer is configured to pwm the af of gpio d pin 12.  
- *
  * global variables:
- *   -data_block = black of data dma moves from memory to peripheral
  *   -increment = pwm duty cycle value
  *   -descending = flag for increasing or decreasing increment
  */
+
+
+#define WS2812_BUFFER_SIZE 24*4
+#define WS2812_CLOCK 800000
+#define WS2812_T0H 0.32
+#define WS2812_T1H 0.64
+#define WS2812_TRESET 50e-6
+ 
+static volatile enum {
+    ws2812_state_uninit = 0,
+    ws2812_state_reset_blank,
+    ws2812_state_idle,
+    ws2812_state_sending
+} ws2812_state = ws2812_state_uninit;
+
+ 
 uint16_t data_block[256];
-uint16_t increment;
+uint16_t multiplier;
 uint16_t descending;
 
 static void clock_setup(void)
@@ -56,7 +69,6 @@ static void gpio_setup(void)
      *   -Set port D which has clock
      *   -Set the mode to the alternate function enabled for pwm
      *   -Disable or set the pull up pull down register to none
-     *   -Enable it on gpios 12, 13, 14, and 15.
      */
     gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);
     /* Set GPIO12 (in GPIO port D) alternate function */
@@ -65,78 +77,30 @@ static void gpio_setup(void)
 
 static void tim_setup(void)
 {
-    /*
-     * Enable rcc clock on TIM4
-     * enable nested vector inturrupt
-     * reset timer from previous value in registers
-     */
     rcc_periph_clock_enable(RCC_TIM4);
     nvic_enable_irq(NVIC_TIM4_IRQ);
     timer_reset(TIM4);
-    /* Timer global mode:
-    * - No divider
-    * - Alignment edge
-    * - Direction up
-    */
-    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT,
-                   TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
-    /*
-     * No prescaler, normal clock will suffice.
-     * enable continuous clock
-     * set period to max 16 bit value or 65535
-     */
+
+    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
     timer_set_prescaler(TIM4, 0);
     timer_continuous_mode(TIM4);
-    timer_set_period(TIM4, 65535);
-    /*
-     * disable output compare output on all 4 channels
-     */
+    //fiddle
+    timer_set_period(TIM4, 256);
     timer_disable_oc_output(TIM4, TIM_OC1);
-    /*
-     * clear output compare registers on all 4 channels
-     */
     timer_disable_oc_clear(TIM4, TIM_OC1);
-    /*
-     * enable output compare preloading or auto updating
-     */
     timer_enable_oc_preload(TIM4, TIM_OC1);
-    /*
-     * set the output compare to slow mode in all 4 channels
-     */
     timer_set_oc_slow_mode(TIM4, TIM_OC1);
-    /*
-     * set the output compare to pwm1 for all for channels
-     */
     timer_set_oc_mode(TIM4, TIM_OC1, TIM_OCM_PWM1);
-    /*
-     * disable output compare output on all 4 channels
-     */
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
-    /*
-     * set output compare value to 500, dim or short duty cycle
-     */
     timer_set_oc_value(TIM4, TIM_OC1, 500);
-    /*
-     * enable output compare output on all 4 channels
-     */
     timer_enable_oc_output(TIM4, TIM_OC1);
-    /*
-     * enable the preload
-     * enable the counter
-     * enable the inturrupt on the auto update register
 
-     */
-    //timer_set_dma_on_update_event(TIM4);
     timer_enable_preload(TIM4);
     timer_enable_counter(TIM4);
     timer_enable_irq(TIM4, TIM_DIER_UDE);
 }
-/*--------------------------------------------------------------------*/
-static void dma_setup(void)
-{
-    // good
-    rcc_periph_clock_enable(RCC_DMA1);
-    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+static void dma_init(void)
+{     
     dma_stream_reset(DMA1, DMA_STREAM6);
     dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_MEDIUM);
     // 16 bit seems good size
@@ -152,11 +116,19 @@ static void dma_setup(void)
     dma_set_memory_address(DMA1, DMA_STREAM6,(uint32_t)data_block);
     // number of datablocks to transfer from mem to peripheral
     dma_set_number_of_data(DMA1, DMA_STREAM6, 256);
-    // inturrupt when halfway and when complete.
-    //dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
+    // inturrupt when complete, send data again but this time less in inturrupt
+    dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
     dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
     // use channel 2 b/c its mapped to TIM4_UP on stream 6
     dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
+}
+/*--------------------------------------------------------------------*/
+static void dma_setup(void)
+{
+    // good
+    rcc_periph_clock_enable(RCC_DMA1);
+    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+    dma_init();
     // needed to catch dma compete flag
     nvic_clear_pending_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
@@ -170,36 +142,76 @@ static void dma_start(void)
 }
 
 void dma1_stream6_isr(void)
-{
-    
+{   
+    if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_HTIF)) {
+        dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_HTIF);
+        // find a value to set data block
+        // int j;
+        // for(j=0; j<128; j++) {
+        //     data_block[j] = index*multiplier;
+        // }
+    }
     if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_TCIF)) {
-        #if 0
         dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_TCIF);
-     
-        dma_stream_reset(DMA1, DMA_STREAM6);
-        dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_MEDIUM);
-        // 16 bit seems good size
-        dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_16BIT);
-        dma_set_peripheral_size(DMA1, DMA_STREAM6, DMA_SxCR_PSIZE_16BIT);
-        // not too sure about these settings
-        dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
-        //dma_enable_circular_mode(DMA1, DMA_STREAM6);
-        dma_set_transfer_mode(DMA1, DMA_STREAM6, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-        // not convinced
-        dma_set_peripheral_address(DMA1, DMA_STREAM6, (uint32_t)&TIM4_CCR1);
-        // I think this should be a local variable need to make it
-        dma_set_memory_address(DMA1, DMA_STREAM6,(uint32_t)data_block);
-        // number of datablocks to transfer from mem to peripheral
-        dma_set_number_of_data(DMA1, DMA_STREAM6, 256);
-        // inturrupt when complete, send data again but this time less in inturrupt
-        dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
-        // use channel 2 b/c its mapped to TIM4_UP on stream 6
-        dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
-        // good to get dma running
-        dma_enable_stream(DMA1, DMA_STREAM6);
-#endif
+        // find a value to set data block
+        // int j;
+        // for(j=128; j<256; j++) {
+        //     data_block[j] = index*multiplier;
+        // }
     }
 }
+
+
+// static uint32_t ws2812_timer_input_frequency(void)
+// {
+//     return rcc_apb1_frequency;
+// }
+
+// static uint8_t ws2812_timer_period(void)
+// {
+//     return (uint16_t)((ws2812_timer_input_frequency() + (uint32_t)((WS2812_CLOCK)/2)) /
+//         (uint32_t)(WS2812_CLOCK));
+// }
+
+// static uint16_t ws2812_timer_reset_period(void)
+// {
+//     return (uint16_t)(ws2812_timer_input_frequency() /
+//         (uint32_t)(1.0 / (WS2812_TRESET) + 0.5)) + 2;
+// }
+
+// static void ws2812_dma_disable(void)
+// {
+//     dma_stream_reset(DMA1, DMA_STREAM6);
+//     TIM4_CCR1 = 0;
+// }
+
+// void ws2812_send(const void *data, uint16_t length)
+// {
+//     if (length == 0)
+//         return;
+    
+//     while (ws2812_busy()) { __asm__("nop"); }
+    
+
+//     cm_enable_interrupts();
+//     ws2812_state = ws2812_state_sending;
+//     ws2812_timer_init();
+//     ws2812_dma_init();
+//     ws2812_mode_initialize(data, length);
+//     ws2812_timer_start_main();
+//     cm_disable_interrupts();
+// }
+
+// static bool ws2812_busy(void)
+// {
+//     return ws2812_state != ws2812_state_idle;
+// }
+
+// static bool ws2812_transmitting(void)
+// {
+//     return ws2812_state == ws2812_state_sending;
+// }
+
 
 int main(void)
 {
@@ -211,9 +223,11 @@ int main(void)
     gpio_setup();
     tim_setup();
     dma_setup();
+    descending = 0;
+    multiplier = 10;
     int i;
     for(i=0; i<256; i++) {
-        data_block[i] = i*100;
+        data_block[i] = i*multiplier;
     }
     dma_start();
     /*
@@ -224,3 +238,4 @@ int main(void)
     }
     return 0;
 }
+
