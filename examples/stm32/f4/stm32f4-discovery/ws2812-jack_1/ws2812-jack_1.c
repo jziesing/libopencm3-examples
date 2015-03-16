@@ -1,4 +1,3 @@
-
 /*
 * This file is part of the libopencm3 project.
 *
@@ -26,167 +25,128 @@
 #include <libopencm3/stm32/dma.h>
 #include <libopencmsis/core_cm3.h>
 /*
- * summary:
- *   This example uses dma to add data to a peripheral, a timer. 
- *   The timer is configured to pwm the af of gpio d pin 12.  
- *
- * global variables:
- *   -data_block = black of data dma moves from memory to peripheral
- *   -increment = pwm duty cycle value
- *   -descending = flag for increasing or decreasing increment
+ * Note: this program can send 1 and 0 signals to ws2812 but addressing which led in strip
+ * and specificing a color is not working.  Unclear how led controller works, still learning.
+ * Change 1 or 0 in value stored in data block.
  */
+/* Global vars. */
 uint16_t data_block[256];
-uint16_t increment;
+uint16_t multiplier;
 uint16_t descending;
-
 static void clock_setup(void)
 {
     /*
-     * setup main clock at 3.3 volts and 168 mhz
-     */
+    * setup main clock at 3.3 volts and 168 mhz
+    */
     rcc_clock_setup_hse_3v3(&hse_8mhz_3v3[CLOCK_3V3_168MHZ]);
 }
-
 static void gpio_setup(void)
 {
     /* Enable clock on GPIOD pin. */
     rcc_periph_clock_enable(RCC_GPIOD);
     /*
-     * Setup gpio mode:
-     *   -Set port D which has clock
-     *   -Set the mode to the alternate function enabled for pwm
-     *   -Disable or set the pull up pull down register to none
-     *   -Enable it on gpios 12, 13, 14, and 15.
-     */
+    * Setup gpio mode:
+    * -Set port D which has clock
+    * -Set the mode to the alternate function enabled for pwm
+    * -Disable or set the pull up pull down register to none
+    */
     gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);
     /* Set GPIO12 (in GPIO port D) alternate function */
     gpio_set_af(GPIOD, GPIO_AF2, GPIO12);
 }
-
 static void tim_setup(void)
 {
-    /*
-     * Enable rcc clock on TIM4
-     * enable nested vector inturrupt
-     * reset timer from previous value in registers
-     */
     rcc_periph_clock_enable(RCC_TIM4);
     nvic_enable_irq(NVIC_TIM4_IRQ);
     timer_reset(TIM4);
-    /* Timer global mode:
-    * - No divider
-    * - Alignment edge
-    * - Direction up
-    */
-    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT,
-                   TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
-    /*
-     * No prescaler, normal clock will suffice.
-     * enable continuous clock
-     * set period to max 16 bit value or 65535
-     */
+    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
     timer_set_prescaler(TIM4, 0);
     timer_continuous_mode(TIM4);
-    timer_set_period(TIM4, 65535);
-    /*
-     * disable output compare output on all 4 channels
-     */
+    timer_set_period(TIM4, 104);
     timer_disable_oc_output(TIM4, TIM_OC1);
-    /*
-     * clear output compare registers on all 4 channels
-     */
     timer_disable_oc_clear(TIM4, TIM_OC1);
-    /*
-     * enable output compare preloading or auto updating
-     */
     timer_enable_oc_preload(TIM4, TIM_OC1);
-    /*
-     * set the output compare to slow mode in all 4 channels
-     */
     timer_set_oc_slow_mode(TIM4, TIM_OC1);
-    /*
-     * set the output compare to pwm1 for all for channels
-     */
     timer_set_oc_mode(TIM4, TIM_OC1, TIM_OCM_PWM1);
-    /*
-     * disable output compare output on all 4 channels
-     */
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
-    /*
-     * set output compare value to 500, dim or short duty cycle
-     */
-    timer_set_oc_value(TIM4, TIM_OC1, 500);
-    /*
-     * enable output compare output on all 4 channels
-     */
+    timer_set_oc_value(TIM4, TIM_OC1, 0);
     timer_enable_oc_output(TIM4, TIM_OC1);
-    /*
-     * enable the preload
-     * enable the counter
-     * enable the inturrupt on the auto update register
-
-     */
-    //timer_set_dma_on_update_event(TIM4);
     timer_enable_preload(TIM4);
     timer_enable_counter(TIM4);
     timer_enable_irq(TIM4, TIM_DIER_UDE);
 }
-/*--------------------------------------------------------------------*/
-static void dma_setup(void)
+void dma_init(void)
 {
-    // good
-    rcc_periph_clock_enable(RCC_DMA1);
-    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
     dma_stream_reset(DMA1, DMA_STREAM6);
-    dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_MEDIUM);
-    // 16 bit seems good size
+    dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_HIGH);
+// 16 bit seems good size
     dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_16BIT);
     dma_set_peripheral_size(DMA1, DMA_STREAM6, DMA_SxCR_PSIZE_16BIT);
-    // not too sure about these settings
+// not too sure about these settings
     dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
     dma_enable_circular_mode(DMA1, DMA_STREAM6);
     dma_set_transfer_mode(DMA1, DMA_STREAM6, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-    // not convinced
+// not convinced
     dma_set_peripheral_address(DMA1, DMA_STREAM6, (uint32_t)&TIM4_CCR1);
-    // I think this should be a local variable need to make it
-    dma_set_memory_address(DMA1, DMA_STREAM6,(uint32_t)data_block);
-    // number of datablocks to transfer from mem to peripheral
-    dma_set_number_of_data(DMA1, DMA_STREAM6, 256);
-    // inturrupt when halfway and when complete.
-    //dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
+// I think this should be a local variable need to make it
+    dma_set_memory_address(DMA1, DMA_STREAM6, (uint32_t)data_block);
+// number of datablocks to transfer from mem to peripheral
+    dma_set_number_of_data(DMA1, DMA_STREAM6, 16);
+// inturrupt when complete, send data again but this time less in inturrupt
+    dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
     dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
-    // use channel 2 b/c its mapped to TIM4_UP on stream 6
+// use channel 2 b/c its mapped to TIM4_UP on stream 6
     dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
-    // needed to catch dma compete flag
+}
+/*--------------------------------------------------------------------*/
+static void dma_setup(void)
+{
+// good
+    rcc_periph_clock_enable(RCC_DMA1);
+    nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+    dma_init();
+// needed to catch dma compete flag
     nvic_clear_pending_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_set_priority(NVIC_DMA1_STREAM6_IRQ, 0);
 }
-
 static void dma_start(void)
 {
-     // good to get dma running
+// good to get dma running
     dma_enable_stream(DMA1, DMA_STREAM6);
 }
-
+void dma1_stream6_isr(void)
+{
+    if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_HTIF)) {
+        dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_HTIF);
+    }
+    if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_TCIF)) {
+        dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_TCIF);
+    }
+}
 int main(void)
 {
     /*
-     * initialize to increasing duty cycle
-     * setup the clock, gpio, and timer.. in that order
-     */
+    * initialize to increasing duty cycle
+    * setup the clock, gpio, and timer.. in that order
+    */
     clock_setup();
     gpio_setup();
     tim_setup();
     dma_setup();
+    descending = 0;
+    multiplier = 10;
     int i;
-    for(i=0; i<256; i++) {
-        data_block[i] = i*100;
+    // 60 = 1 
+    // 29 = 0
+    for (i = 0; i < 256; i++) {
+//data_block[i] = i*multiplier;
+        data_block[i] = 29;
     }
     dma_start();
     /*
-     * just wait for the inturrupt..
-     */
+    * just wait for the inturrupt..
+    */
     while (1) {
         __WFI();
     }

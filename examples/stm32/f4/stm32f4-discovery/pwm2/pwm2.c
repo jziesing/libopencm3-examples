@@ -127,12 +127,12 @@ static void tim_setup(void)
     timer_set_oc_polarity_high(TIM4, TIM_OC3);
     timer_set_oc_polarity_high(TIM4, TIM_OC4);
     /*
-     * set output compare value to 500, dim or short duty cycle
+     * set output compare value to 0, off or zero duty cycle
      */
-    timer_set_oc_value(TIM4, TIM_OC1, 500);
-    timer_set_oc_value(TIM4, TIM_OC2, 500);
-    timer_set_oc_value(TIM4, TIM_OC3, 500);
-    timer_set_oc_value(TIM4, TIM_OC4, 500);
+    timer_set_oc_value(TIM4, TIM_OC1, 0);
+    timer_set_oc_value(TIM4, TIM_OC2, 0);
+    timer_set_oc_value(TIM4, TIM_OC3, 0);
+    timer_set_oc_value(TIM4, TIM_OC4, 0);
     /*
      * enable output compare output on all 4 channels
      */

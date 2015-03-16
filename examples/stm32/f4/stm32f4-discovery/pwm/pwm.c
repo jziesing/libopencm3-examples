@@ -51,8 +51,7 @@ static void tim_setup(void)
     * - Alignment edge
     * - Direction up
     */
-    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT,
-                   TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
+    timer_set_mode(TIM4, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
     timer_set_prescaler(TIM4, 0);
     /* Enable preload. */
     timer_disable_preload(TIM4);
@@ -65,7 +64,6 @@ static void tim_setup(void)
     timer_disable_oc_output(TIM4, TIM_OC2);
     timer_disable_oc_output(TIM4, TIM_OC3);
     timer_disable_oc_output(TIM4, TIM_OC4);
-    
     /* -- OC1 configuration -- */
     /* Configure global mode of line 1. */
     timer_disable_oc_clear(TIM4, TIM_OC1);
@@ -73,8 +71,7 @@ static void tim_setup(void)
     timer_set_oc_slow_mode(TIM4, TIM_OC1);
     timer_set_oc_mode(TIM4, TIM_OC1, TIM_OCM_PWM1);
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
-
-    /* Set the capture compare value for OC1. */
+    /* Set the capture compare value for OC1 to max value -1 for max duty cycle/brightness. */
     timer_set_oc_value(TIM4, TIM_OC1, 65534);    
     timer_enable_oc_output(TIM4, TIM_OC1);
     timer_enable_preload(TIM4);

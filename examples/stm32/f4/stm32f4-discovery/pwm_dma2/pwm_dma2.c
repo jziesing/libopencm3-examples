@@ -108,9 +108,9 @@ static void tim_setup(void)
      */
     timer_set_oc_polarity_high(TIM4, TIM_OC1);
     /*
-     * set output compare value to 500, dim or short duty cycle
+     * set output compare value to 0, dim or short duty cycle
      */
-    timer_set_oc_value(TIM4, TIM_OC1, 500);
+    timer_set_oc_value(TIM4, TIM_OC1, 0);
     /*
      * enable output compare output on all 4 channels
      */
@@ -151,11 +151,12 @@ static void dma_init(void)
 /*--------------------------------------------------------------------*/
 static void dma_setup(void)
 {
-    // good
+    // setup clock and global interrupt on dma controller
     rcc_periph_clock_enable(RCC_DMA1);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
+    // call dma init to handle most dma setup calls
     dma_init();
-    // needed to catch dma compete flag
+    // enable global interrupts to catch dma transfer complete
     nvic_clear_pending_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_set_priority(NVIC_DMA1_STREAM6_IRQ, 0);
@@ -169,8 +170,12 @@ static void dma_start(void)
 
 void dma1_stream6_isr(void)
 {   
+    // Catch half transfer flag
     if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_HTIF)) {
+        // Clear half transfer flag
         dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_HTIF);
+        // Logic to update multipliers to compute values in the data to transfer
+        // Very screwey, but does make values generally pulse large and small making led's pulse
         if (descending == 0)
         {
             if (multiplier >= 200)
@@ -194,14 +199,17 @@ void dma1_stream6_isr(void)
                 index -= 14;
             }
         }
+        // Update to fill first half of data block
         int j;
         for(j=0; j<128; j++) {
             data_block[j] = index*multiplier;
         }
     }
+    // Complete transfer flag
     if (dma_get_interrupt_flag(DMA1, DMA_STREAM6, DMA_TCIF)) {
+        // Clear complete transfer flag
         dma_clear_interrupt_flags(DMA1, DMA_STREAM6, DMA_TCIF);
-        
+        // Update remaining spots in data block
         int j;
         for(j=128; j<256; j++) {
             data_block[j] = index*multiplier;
@@ -223,9 +231,6 @@ int main(void)
     multiplier = 10;
     index = 1;
     int i;
-    for(i=0; i<256; i++) {
-        data_block[i] = i*multiplier;
-    }
     dma_start();
     /*
      * just wait for the inturrupt..
