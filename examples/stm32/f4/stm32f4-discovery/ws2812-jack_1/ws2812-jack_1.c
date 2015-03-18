@@ -24,34 +24,17 @@
 #include <libopencm3/stm32/exti.h>
 #include <libopencm3/stm32/dma.h>
 #include <libopencmsis/core_cm3.h>
-/*
- * Note: this program can send 1 and 0 signals to ws2812 but addressing which led in strip
- * and specificing a color is not working.  Unclear how led controller works, still learning.
- * Change 1 or 0 in value stored in data block.
- */
-/* Global vars. */
-uint16_t data_block[256];
-uint16_t multiplier;
-uint16_t descending;
+
+uint16_t data_block[136];
+
 static void clock_setup(void)
 {
-    /*
-    * setup main clock at 3.3 volts and 168 mhz
-    */
     rcc_clock_setup_hse_3v3(&hse_8mhz_3v3[CLOCK_3V3_168MHZ]);
 }
 static void gpio_setup(void)
 {
-    /* Enable clock on GPIOD pin. */
     rcc_periph_clock_enable(RCC_GPIOD);
-    /*
-    * Setup gpio mode:
-    * -Set port D which has clock
-    * -Set the mode to the alternate function enabled for pwm
-    * -Disable or set the pull up pull down register to none
-    */
     gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);
-    /* Set GPIO12 (in GPIO port D) alternate function */
     gpio_set_af(GPIOD, GPIO_AF2, GPIO12);
 }
 static void tim_setup(void)
@@ -75,44 +58,36 @@ static void tim_setup(void)
     timer_enable_counter(TIM4);
     timer_enable_irq(TIM4, TIM_DIER_UDE);
 }
-void dma_init(void)
+static void dma_init(void)
 {
     dma_stream_reset(DMA1, DMA_STREAM6);
-    dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_HIGH);
-// 16 bit seems good size
-    dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_16BIT);
+    dma_set_priority(DMA1, DMA_STREAM6, DMA_SxCR_PL_VERY_HIGH);
+    dma_set_memory_size(DMA1, DMA_STREAM6, DMA_SxCR_MSIZE_8BIT);
     dma_set_peripheral_size(DMA1, DMA_STREAM6, DMA_SxCR_PSIZE_16BIT);
-// not too sure about these settings
-    dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
     dma_enable_circular_mode(DMA1, DMA_STREAM6);
+    dma_enable_memory_increment_mode(DMA1, DMA_STREAM6);
     dma_set_transfer_mode(DMA1, DMA_STREAM6, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-// not convinced
     dma_set_peripheral_address(DMA1, DMA_STREAM6, (uint32_t)&TIM4_CCR1);
-// I think this should be a local variable need to make it
-    dma_set_memory_address(DMA1, DMA_STREAM6, (uint32_t)data_block);
-// number of datablocks to transfer from mem to peripheral
-    dma_set_number_of_data(DMA1, DMA_STREAM6, 16);
-// inturrupt when complete, send data again but this time less in inturrupt
+    dma_set_memory_address(DMA1, DMA_STREAM6, (uint32_t)&data_block);
+    // 2 LED's = (24 * 2) + 40 
+    // 40 = 50us/1.25us
+    dma_set_number_of_data(DMA1, DMA_STREAM6, 136);
     dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM6);
     dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM6);
-// use channel 2 b/c its mapped to TIM4_UP on stream 6
     dma_channel_select(DMA1, DMA_STREAM6, DMA_SxCR_CHSEL_2);
 }
 /*--------------------------------------------------------------------*/
 static void dma_setup(void)
 {
-// good
     rcc_periph_clock_enable(RCC_DMA1);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
     dma_init();
-// needed to catch dma compete flag
     nvic_clear_pending_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_enable_irq(NVIC_DMA1_STREAM6_IRQ);
     nvic_set_priority(NVIC_DMA1_STREAM6_IRQ, 0);
 }
 static void dma_start(void)
 {
-// good to get dma running
     dma_enable_stream(DMA1, DMA_STREAM6);
 }
 void dma1_stream6_isr(void)
@@ -126,27 +101,41 @@ void dma1_stream6_isr(void)
 }
 int main(void)
 {
-    /*
-    * initialize to increasing duty cycle
-    * setup the clock, gpio, and timer.. in that order
-    */
     clock_setup();
     gpio_setup();
     tim_setup();
     dma_setup();
-    descending = 0;
-    multiplier = 10;
     int i;
     // 60 = 1 
     // 29 = 0
-    for (i = 0; i < 256; i++) {
-//data_block[i] = i*multiplier;
-        data_block[i] = 29;
+    // test make first two led's green
+    for (i = 0; i < 136; i++) {
+        // green
+        if (i < 8) {
+            data_block[i] = 60;
+        } 
+        // red
+        else if (i > 31 && i < 40) {
+            data_block[i] = 60;
+        }
+        // green 
+        else if (i > 47 && i < 56) {
+            data_block[i] = 60;
+        }
+        // red 
+        else if (i > 79 && i < 88) {
+            data_block[i] = 60;
+        }
+        // break
+        else if (i > 95) {
+            data_block[i] = 0;
+        }
+        else {
+            data_block[i] = 29;
+        }
+
     }
     dma_start();
-    /*
-    * just wait for the inturrupt..
-    */
     while (1) {
         __WFI();
     }
