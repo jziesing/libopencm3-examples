@@ -17,7 +17,7 @@
 ## along with this library.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
-BINARY = ws2812-jack_2
+BINARY = dmapwmfancyblink
 
 LDSCRIPT = ../stm32f4-discovery.ld
 

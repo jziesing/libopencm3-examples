@@ -17,7 +17,7 @@
 ## along with this library.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
-BINARY = pwm
+BINARY = pwmblink
 
 LDSCRIPT = ../stm32f4-discovery.ld
 
